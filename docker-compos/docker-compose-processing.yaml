@@ -1,0 +1,39 @@
+version: '3'
+
+services:
+  spark-master:
+    image: airflow/spark-master # Airflow에서 DockerOperator를 사용할 때
+    build: ./spark/master # Local에서 spark/master 디렉토리를 타겟팅
+    container_name: spark-master
+    ports:
+      - "8082:8080"
+      - "7077:7077"
+    environment:
+      - INIT_DAEMON_STEP=setup_spark
+    networks:
+      - ndsnet
+    deploy:
+      resources:
+        limits:
+          memory: 500MB
+
+  spark-worker:
+    image: airflow/spark-worker
+    build: ./spark/worker
+    container_name: spark-worker
+    depends_on:
+      - spark-master
+    ports:
+      - "8081:8081"
+    environment:
+      - "SPARK_MASTER=spark://spark-master:7077"
+    networks:
+      - ndsnet
+    deploy:
+      resources:
+        limits:
+          memory: 1GB
+
+networks:
+  ndsnet:
+    external: true
