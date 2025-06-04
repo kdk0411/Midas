@@ -12,17 +12,28 @@
 - docker network create ndsnet
 2. 파일 권한 -> 아래 2중 1택
 
-sudo rm -rf dags logs plugins && mkdir -p dags logs plugins && sudo chown -R $(id -u):0 dags logs plugins
+sudo rm -rf dags logs plugins && mkdir -p dags logs plugins include config && sudo chown -R $(id -u):0 dags logs plugins include config
 
-- echo -e "AIRFLOW_UID=$(id -u)\nAIRFLOW_GID=0" > .env
-- rm -rf dags && mkdir -p dags logs plugins
-- sudo chown -R $(id -u):0 ./logs ./dags ./plugins
+- echo -e "AIRFLOW_UID=$(id -u)\nAIRFLOW_GID=0\nAIRFLOW__WEBSERVER__SECRET_KEY=$(openssl rand -hex 30)" > .env
+- rm -rf dags && mkdir -p dags logs plugins include config
+- sudo chown -R $(id -u):0 ./logs ./dags ./plugins ./include ./config requirements.txt
 - sudo chown -R $(id -u):0 .
 
 Airflow와 Storage는 의존성 문제로 아래 명령어로 실행해야 한다.
-docker compose -p airflow -f docker-compose-storage.yaml -f docker-compose-airflow.yaml up -d
+docker compose --env-file .env -p airflow -f docker-compose-storage.yaml -f docker-compose-airflow.yaml up -d
+# --env-file .env : .env 파일을 envfile로 지정
+# -p airflow : Project Name을 airflow로 지정
+# -f : yaml 파일을 지정해서 사용
 이미 실행 했다면 아래 명령어
 docker compose -p airflow -f docker-compose-storage.yaml -f docker-compose-airflow.yaml down
+
+각각 실행 - storage가 완벽하게 실행되면 airflow를 실행
+docker compose -p airflow -f docker-compose-storage.yaml up -d
+docker compose -p airflow -f docker-compose-airflow.yaml up -d
+
+Migration Error
+docker volume rm airflow_postgres-db-volume
+이후 재시작
 
 1. **스토리지 레이어** (`docker-compose-storage.yaml`)
    - PostgreSQL: Airflow 메타데이터 저장소
@@ -43,6 +54,8 @@ docker compose -p airflow -f docker-compose-storage.yaml -f docker-compose-airfl
    - Airflow Triggerer: 이벤트 기반 작업 처리
    - echo "AIRFLOW_UID=$(id -u)" > .env -> 파일 권한 문제 방지 환경 변수 설정
    - docker compose -f docker-compose-airflow.yaml up -d
+   - Flower 실행 방법 -> --profile flower 옵션 추가
+      - docker compose -p airflow -f docker-compose-airflow.yaml up -d
 
 3. **데이터 처리 레이어** (`docker-compose-processing.yaml`)
    - Spark Master: 분산 처리 관리

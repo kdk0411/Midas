@@ -13,7 +13,7 @@ x-airflow-common:
     # AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
     AIRFLOW__API__AUTH_BACKENDS: ''
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
-    _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-minio==7.1.14 apache-airflow-providers-docker==3.7.1 apache-airflow-providers-slack==8.1.0 pandas psycopg2-binary}
+    # _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-minio==7.1.14 apache-airflow-providers-docker==3.7.1 apache-airflow-providers-slack==8.1.0 pandas psycopg2-binary}
     # AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
   volumes:
     - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
@@ -21,6 +21,7 @@ x-airflow-common:
     - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
     - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
     - ${AIRFLOW_PROJ_DIR:-.}/include:/opt/airflow/include
+    - ${AIRFLOW_PROJ_DIR:-.}/requirements.txt:/requirements.txt
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     &airflow-common-depends-on
@@ -238,6 +239,8 @@ services:
       _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow}
       _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
       _PIP_ADDITIONAL_REQUIREMENTS: ''
+      _AIRFLOW_VARIABLES_IMPORT: 'true'
+      _AIRFLOW_VARIABLES_FILE: '/opt/airflow/config/variables.yaml'
     user: "0:0"
     volumes:
       - ${AIRFLOW_PROJ_DIR:-.}:/sources
@@ -263,8 +266,6 @@ services:
     container_name: flower
     <<: *airflow-common
     command: celery flower
-    profiles:
-      - flower
     ports:
       - "5555:5555"
     healthcheck:

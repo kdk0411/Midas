@@ -1,0 +1,10 @@
+pandas
+minio==7.1.14
+apache-airflow-providers-docker==3.7.1
+apache-airflow-providers-slack==8.1.0
+psycopg2-binary
+pymysql
+sqlalchemy
+selenium==4.18.1
+boto3>=1.26.0
+botocore>=1.29.0 
