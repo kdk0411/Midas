@@ -25,13 +25,13 @@ def get_dag_config():
         logger.info(f"Running in fullrefresh mode")
         return {
             'schedule_interval': None,  # 스케줄링 비활성화
-            'catchup': False
+            'catchup': False  # 이전 실행 비활성화
         }
     elif GOLD_PRICE_MODE == "backfill":  # backfill 모드
         logger.info(f"Running in backfill mode")
         return {
             'schedule_interval': '*/1 9-15 * * 1-5',  # 평일 9시부터 15시까지 1분마다
-            'catchup': False
+            'catchup': False  # 이전 실행 비활성화
         }
     else:
         logger.error(f"Invalid gold_price_mode: {GOLD_PRICE_MODE}")
@@ -39,7 +39,7 @@ def get_dag_config():
 
 default_args = {
     'owner': 'airflow',
-    'depends_on_past': False,
+    'depends_on_past': False,  # 이전 실행 의존성 제거
     'start_date': datetime(2025, 6, 4),
     'email_on_failure': False,
     'email_on_retry': False,

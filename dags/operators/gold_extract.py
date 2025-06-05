@@ -11,14 +11,15 @@ from airflow.models import BaseOperator
 from airflow.utils.decorators import apply_defaults
 class GoldExtractOperator(BaseOperator):
     @apply_defaults
-    def __init__(self,
-                minio_endpoint='localhost:9000', 
-                minio_access_key='minioadmin', 
-                minio_secret_key='minioadmin', 
-                minio_bucket='gold-data',
-                mode='backfill',
-                *args,
-                **kwargs):
+    def __init__(
+        self,
+        minio_endpoint='localhost:9000', 
+        minio_access_key='minioadmin', 
+        minio_secret_key='minioadmin', 
+        minio_bucket='gold-data',
+        mode='backfill',
+        *args,
+        **kwargs):
         super().__init__(*args, **kwargs)
         self.logger = logging.getLogger(__name__)
         self.minio_endpoint = minio_endpoint
