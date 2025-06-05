@@ -9721,3 +9721,51 @@ AttributeError: type object 'datetime.datetime' has no attribute 'datetime'
 [2025-06-05T07:19:24.276+0000] {logging_mixin.py:188} INFO - [2025-06-05T07:19:24.275+0000] {dag.py:3096} INFO - Sync 1 DAGs
 [2025-06-05T07:19:24.307+0000] {logging_mixin.py:188} INFO - [2025-06-05T07:19:24.307+0000] {dag.py:3954} INFO - Setting next_dagrun for gold_price_pipeline to None, run_after=None
 [2025-06-05T07:19:24.374+0000] {processor.py:183} INFO - Processing /opt/airflow/dags/gold_price_dag.py took 1.937 seconds
+[2025-06-05T07:19:54.657+0000] {processor.py:161} INFO - Started process (PID=5907) to work on /opt/airflow/dags/gold_price_dag.py
+[2025-06-05T07:19:54.659+0000] {processor.py:830} INFO - Processing file /opt/airflow/dags/gold_price_dag.py for tasks to queue
+[2025-06-05T07:19:54.660+0000] {logging_mixin.py:188} INFO - [2025-06-05T07:19:54.660+0000] {dagbag.py:545} INFO - Filling up the DagBag from /opt/airflow/dags/gold_price_dag.py
+[2025-06-05T07:19:55.935+0000] {logging_mixin.py:188} INFO - [2025-06-05T07:19:55.935+0000] {gold_price_dag.py:25} INFO - Running in fullrefresh mode
+[2025-06-05T07:19:56.263+0000] {processor.py:840} INFO - DAG(s) 'gold_price_pipeline' retrieved from /opt/airflow/dags/gold_price_dag.py
+[2025-06-05T07:19:56.290+0000] {logging_mixin.py:188} INFO - [2025-06-05T07:19:56.289+0000] {dag.py:3096} INFO - Sync 1 DAGs
+[2025-06-05T07:19:56.315+0000] {logging_mixin.py:188} INFO - [2025-06-05T07:19:56.314+0000] {dag.py:3954} INFO - Setting next_dagrun for gold_price_pipeline to None, run_after=None
+[2025-06-05T07:19:56.362+0000] {processor.py:183} INFO - Processing /opt/airflow/dags/gold_price_dag.py took 1.718 seconds
+[2025-06-05T07:20:26.641+0000] {processor.py:161} INFO - Started process (PID=5915) to work on /opt/airflow/dags/gold_price_dag.py
+[2025-06-05T07:20:26.644+0000] {processor.py:830} INFO - Processing file /opt/airflow/dags/gold_price_dag.py for tasks to queue
+[2025-06-05T07:20:26.646+0000] {logging_mixin.py:188} INFO - [2025-06-05T07:20:26.646+0000] {dagbag.py:545} INFO - Filling up the DagBag from /opt/airflow/dags/gold_price_dag.py
+[2025-06-05T07:20:27.733+0000] {logging_mixin.py:188} INFO - [2025-06-05T07:20:27.733+0000] {gold_price_dag.py:25} INFO - Running in fullrefresh mode
+[2025-06-05T07:20:28.099+0000] {processor.py:840} INFO - DAG(s) 'gold_price_pipeline' retrieved from /opt/airflow/dags/gold_price_dag.py
+[2025-06-05T07:20:28.127+0000] {logging_mixin.py:188} INFO - [2025-06-05T07:20:28.126+0000] {dag.py:3096} INFO - Sync 1 DAGs
+[2025-06-05T07:20:28.149+0000] {logging_mixin.py:188} INFO - [2025-06-05T07:20:28.148+0000] {dag.py:3954} INFO - Setting next_dagrun for gold_price_pipeline to None, run_after=None
+[2025-06-05T07:20:28.185+0000] {processor.py:183} INFO - Processing /opt/airflow/dags/gold_price_dag.py took 1.558 seconds
+[2025-06-05T07:20:58.440+0000] {processor.py:161} INFO - Started process (PID=5923) to work on /opt/airflow/dags/gold_price_dag.py
+[2025-06-05T07:20:58.442+0000] {processor.py:830} INFO - Processing file /opt/airflow/dags/gold_price_dag.py for tasks to queue
+[2025-06-05T07:20:58.444+0000] {logging_mixin.py:188} INFO - [2025-06-05T07:20:58.443+0000] {dagbag.py:545} INFO - Filling up the DagBag from /opt/airflow/dags/gold_price_dag.py
+[2025-06-05T07:20:59.721+0000] {logging_mixin.py:188} INFO - [2025-06-05T07:20:59.720+0000] {gold_price_dag.py:25} INFO - Running in fullrefresh mode
+[2025-06-05T07:21:00.031+0000] {processor.py:840} INFO - DAG(s) 'gold_price_pipeline' retrieved from /opt/airflow/dags/gold_price_dag.py
+[2025-06-05T07:21:00.058+0000] {logging_mixin.py:188} INFO - [2025-06-05T07:21:00.057+0000] {dag.py:3096} INFO - Sync 1 DAGs
+[2025-06-05T07:21:00.078+0000] {logging_mixin.py:188} INFO - [2025-06-05T07:21:00.077+0000] {dag.py:3954} INFO - Setting next_dagrun for gold_price_pipeline to None, run_after=None
+[2025-06-05T07:21:00.136+0000] {processor.py:183} INFO - Processing /opt/airflow/dags/gold_price_dag.py took 1.713 seconds
+[2025-06-05T07:21:30.354+0000] {processor.py:161} INFO - Started process (PID=5931) to work on /opt/airflow/dags/gold_price_dag.py
+[2025-06-05T07:21:30.355+0000] {processor.py:830} INFO - Processing file /opt/airflow/dags/gold_price_dag.py for tasks to queue
+[2025-06-05T07:21:30.357+0000] {logging_mixin.py:188} INFO - [2025-06-05T07:21:30.356+0000] {dagbag.py:545} INFO - Filling up the DagBag from /opt/airflow/dags/gold_price_dag.py
+[2025-06-05T07:21:31.723+0000] {logging_mixin.py:188} INFO - [2025-06-05T07:21:31.722+0000] {gold_price_dag.py:25} INFO - Running in fullrefresh mode
+[2025-06-05T07:21:32.045+0000] {processor.py:840} INFO - DAG(s) 'gold_price_pipeline' retrieved from /opt/airflow/dags/gold_price_dag.py
+[2025-06-05T07:21:32.119+0000] {logging_mixin.py:188} INFO - [2025-06-05T07:21:32.118+0000] {dag.py:3096} INFO - Sync 1 DAGs
+[2025-06-05T07:21:32.149+0000] {logging_mixin.py:188} INFO - [2025-06-05T07:21:32.149+0000] {dag.py:3954} INFO - Setting next_dagrun for gold_price_pipeline to None, run_after=None
+[2025-06-05T07:21:32.188+0000] {processor.py:183} INFO - Processing /opt/airflow/dags/gold_price_dag.py took 1.856 seconds
+[2025-06-05T07:22:02.477+0000] {processor.py:161} INFO - Started process (PID=5939) to work on /opt/airflow/dags/gold_price_dag.py
+[2025-06-05T07:22:02.479+0000] {processor.py:830} INFO - Processing file /opt/airflow/dags/gold_price_dag.py for tasks to queue
+[2025-06-05T07:22:02.481+0000] {logging_mixin.py:188} INFO - [2025-06-05T07:22:02.481+0000] {dagbag.py:545} INFO - Filling up the DagBag from /opt/airflow/dags/gold_price_dag.py
+[2025-06-05T07:22:03.748+0000] {logging_mixin.py:188} INFO - [2025-06-05T07:22:03.748+0000] {gold_price_dag.py:25} INFO - Running in fullrefresh mode
+[2025-06-05T07:22:04.084+0000] {processor.py:840} INFO - DAG(s) 'gold_price_pipeline' retrieved from /opt/airflow/dags/gold_price_dag.py
+[2025-06-05T07:22:04.132+0000] {logging_mixin.py:188} INFO - [2025-06-05T07:22:04.131+0000] {dag.py:3096} INFO - Sync 1 DAGs
+[2025-06-05T07:22:04.157+0000] {logging_mixin.py:188} INFO - [2025-06-05T07:22:04.157+0000] {dag.py:3954} INFO - Setting next_dagrun for gold_price_pipeline to None, run_after=None
+[2025-06-05T07:22:04.200+0000] {processor.py:183} INFO - Processing /opt/airflow/dags/gold_price_dag.py took 1.739 seconds
+[2025-06-05T07:22:34.449+0000] {processor.py:161} INFO - Started process (PID=5947) to work on /opt/airflow/dags/gold_price_dag.py
+[2025-06-05T07:22:34.452+0000] {processor.py:830} INFO - Processing file /opt/airflow/dags/gold_price_dag.py for tasks to queue
+[2025-06-05T07:22:34.454+0000] {logging_mixin.py:188} INFO - [2025-06-05T07:22:34.453+0000] {dagbag.py:545} INFO - Filling up the DagBag from /opt/airflow/dags/gold_price_dag.py
+[2025-06-05T07:22:35.591+0000] {logging_mixin.py:188} INFO - [2025-06-05T07:22:35.591+0000] {gold_price_dag.py:25} INFO - Running in fullrefresh mode
+[2025-06-05T07:22:35.958+0000] {processor.py:840} INFO - DAG(s) 'gold_price_pipeline' retrieved from /opt/airflow/dags/gold_price_dag.py
+[2025-06-05T07:22:35.984+0000] {logging_mixin.py:188} INFO - [2025-06-05T07:22:35.983+0000] {dag.py:3096} INFO - Sync 1 DAGs
+[2025-06-05T07:22:36.015+0000] {logging_mixin.py:188} INFO - [2025-06-05T07:22:36.014+0000] {dag.py:3954} INFO - Setting next_dagrun for gold_price_pipeline to None, run_after=None
+[2025-06-05T07:22:36.060+0000] {processor.py:183} INFO - Processing /opt/airflow/dags/gold_price_dag.py took 1.625 seconds
