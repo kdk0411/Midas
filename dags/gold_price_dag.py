@@ -38,14 +38,14 @@ def get_dag_config():
         raise ValueError(f"Invalid gold_price_mode: {GOLD_PRICE_MODE}")
 
 default_args = {
-    'owner': 'airflow',
+    'owner': 'kdk0411',
     'depends_on_past': False,  # 이전 실행 의존성 제거
     'start_date': datetime(2025, 6, 4),
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 3,
     'retry_delay': timedelta(minutes=5),
-    'queue': 'a-worker_1'  # 특정 worker 지정
+    'queue': 'a-worker_1'  # a-worker_1 queue 사용
 }
 
 # MinIO 설정

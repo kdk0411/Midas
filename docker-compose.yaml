@@ -10,17 +10,15 @@ x-airflow-common:
     AIRFLOW__CORE__FERNET_KEY: ''
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
-    # AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
-    AIRFLOW__API__AUTH_BACKENDS: ''
+    AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.session'
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
-    _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-minio==7.1.14 apache-airflow-providers-docker==3.7.1 apache-airflow-providers-slack==8.1.0 pandas psycopg2-binary}
-    # AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
   volumes:
     - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
     - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
     - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
     - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
     - ${AIRFLOW_PROJ_DIR:-.}/include:/opt/airflow/include
+    - ${AIRFLOW_PROJ_DIR:-.}/requirements.txt:/requirements.txt
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     &airflow-common-depends-on
@@ -30,7 +28,7 @@ x-airflow-common:
       condition: service_healthy
 
 services:
-  # PostgreSQL Service
+  # Storage Services
   postgres:
     container_name: postgres
     image: postgres:13
@@ -51,8 +49,8 @@ services:
     deploy:
       resources:
         limits:
-          memory: 400MB
-  # Redis Service
+          memory: 1G
+
   redis:
     container_name: redis
     image: redis:7.2-bookworm
@@ -67,8 +65,34 @@ services:
     restart: always
     networks:
       - ndsnet
-  # AIRFLOW
-  # WebServer
+
+  minio:
+    image: minio/minio
+    container_name: minio
+    hostname: minio
+    restart: always
+    volumes:
+      - ./include/data/minio:/data
+    ports:
+      - 9000:9000
+      - 9001:9001
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio123
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - ndsnet
+    deploy:
+      resources:
+        limits:
+          memory: 400MB
+
+  # Airflow Services
   airflow-webserver:
     container_name: a-webserver
     <<: *airflow-common
@@ -88,7 +112,7 @@ services:
         condition: service_completed_successfully
     networks:
       - ndsnet
-  # Scheduler
+
   airflow-scheduler:
     container_name: a-scheduler
     <<: *airflow-common
@@ -106,30 +130,7 @@ services:
         condition: service_completed_successfully
     networks:
       - ndsnet
-  # Worker
-  airflow-worker:
-    container_name: a-worker
-    <<: *airflow-common
-    command: celery worker
-    healthcheck:
-      test:
-        - "CMD-SHELL"
-        - 'celery --app airflow.providers.celery.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}" || celery --app airflow.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}"'
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    environment:
-      <<: *airflow-common-env
-      DUMB_INIT_SETSID: "0"
-    restart: always
-    depends_on:
-      <<: *airflow-common-depends-on
-      airflow-init:
-        condition: service_completed_successfully
-    networks:
-      - ndsnet
-  # Triggerer
+
   airflow-triggerer:
     container_name: a-triggerer
     <<: *airflow-common
@@ -147,7 +148,50 @@ services:
         condition: service_completed_successfully
     networks:
       - ndsnet
-  # Init
+
+  airflow-worker-1:
+    <<: *airflow-common
+    container_name: a-worker-1
+    command: airflow celery worker -H worker1@$$HOSTNAME
+    healthcheck:
+      test: ["CMD-SHELL", "airflow celery status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    environment:
+      <<: *airflow-common-env
+      HOSTNAME: worker1
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+    networks:
+      - ndsnet
+
+  airflow-worker-2:
+    <<: *airflow-common
+    container_name: a-worker-2
+    command: airflow celery worker -H worker2@$$HOSTNAME
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow celery inspect ping -d "worker2@${HOSTNAME}"']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    environment:
+      <<: *airflow-common-env
+      DUMB_INIT_SETSID: "0"
+      HOSTNAME: "worker2"
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+    networks:
+      - ndsnet
+
   airflow-init:
     container_name: airflow-init
     <<: *airflow-common
@@ -207,12 +251,14 @@ services:
       _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow}
       _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
       _PIP_ADDITIONAL_REQUIREMENTS: ''
+      _AIRFLOW_VARIABLES_IMPORT: 'true'
+      _AIRFLOW_VARIABLES_FILE: '/opt/airflow/config/variables.yaml'
     user: "0:0"
     volumes:
       - ${AIRFLOW_PROJ_DIR:-.}:/sources
     networks:
       - ndsnet
-  # CLI
+
   airflow-cli:
     container_name: airflow-cli
     <<: *airflow-common
@@ -227,17 +273,16 @@ services:
       - airflow
     networks:
       - ndsnet
-  # Flower
+
   flower:
     container_name: flower
     <<: *airflow-common
-    command: celery flower
-    profiles:
-      - flower
+    command: airflow celery flower --port=5555
     ports:
       - "5555:5555"
     healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:5555/"]
+      # test: ["CMD-SHELL", "celery --app=airflow.providers.celery.executors.celery_executor.app inspect ping -d 'flower@${HOSTNAME}'"]
+      test: ["CMD-SHELL", "airflow celery inspect ping -d 'flower@${HOSTNAME}'"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -249,117 +294,7 @@ services:
         condition: service_completed_successfully
     networks:
       - ndsnet
-  # MINIO
-  minio:
-    image: minio/minio
-    container_name: minio
-    hostname: minio
-    restart: always
-    volumes:
-      - ./include/data/minio:/data
-    ports:
-      - 9000:9000
-      - 9001:9001
-    environment:
-      MINIO_ROOT_USER: minio
-      MINIO_ROOT_PASSWORD: minio123
-    command: server /data --console-address ":9001"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 30s
-      timeout: 20s
-      retries: 3
-    networks:
-      - ndsnet
-    deploy:
-      resources:
-        limits:
-          memory: 400MB
-  # Elasticsearch
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:7.5.2
-    container_name: elasticsearch
-    restart: always
-    environment:
-      ES_JAVA_OPTS: "-Xmx256m -Xms256m"
-      discovery.type: single-node
-    ports:
-      - "9200:9200"
-      - "9300:9300"
-    networks:
-      - ndsnet
-  # Kibana
-  kibana:
-    image: docker.elastic.co/kibana/kibana:7.5.2
-    container_name: kibana
-    restart: always
-    depends_on:
-      - elasticsearch
-    volumes:
-      - ./kibana/kibana.yml:/usr/share/kibana/config/kibana.yml
-    environment:
-      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
-      SERVER_HOST: "0.0.0.0"
-    ports:
-      - "5601:5601"
-    networks:
-      - ndsnet
-  # Logstash
-  logstash:
-    image: docker.elastic.co/logstash/logstash:7.5.2
-    container_name: logstash
-    restart: always
-    depends_on:
-      - elasticsearch
-    volumes:
-      - ./logstash/pipeline:/usr/share/logstash/pipeline
-    networks:
-      - ndsnet
 
-  spark-master:
-    image: airflow/spark-master
-    build: ./spark/master
-    container_name: spark-master
-    ports:
-      - "8082:8080"
-      - "7077:7077"
-    environment:
-      - INIT_DAEMON_STEP=setup_spark
-    networks:
-      - ndsnet
-    deploy:
-      resources:
-        limits:
-          memory: 500MB
-
-  spark-worker:
-    image: airflow/spark-worker
-    build: ./spark/worker
-    container_name: spark-worker
-    depends_on:
-      - spark-master
-    ports:
-      - "8081:8081"
-    environment:
-      - "SPARK_MASTER=spark://spark-master:7077"
-    networks:
-      - ndsnet
-    deploy:
-      resources:
-        limits:
-          memory: 1GB
-  # Metabase - BI
-  metabase:
-    container_name: metabase
-    image: metabase/metabase
-    restart: always
-    ports:
-      - 3000:3000
-    volumes:
-      - ./include/data/metabase:/metabase-data
-    networks:
-      - ndsnet
-  # Docker Proxy
   docker-proxy:
     container_name: docker-proxy
     image: alpine/socat
@@ -370,9 +305,73 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - ndsnet
+
+  # Selenium Grid
+  selenium-hub:
+    image: selenium/hub:4.18.1
+    container_name: selenium-hub
+    ports:
+      - "4442:4442"
+      - "4443:4443"
+      - "4444:4444"
+    networks:
+      - ndsnet
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+  chrome-node:
+    image: selenium/node-chrome:4.18.1
+    container_name: chrome-node
+    shm_size: 2g
+    depends_on:
+      - selenium-hub
+    environment:
+      - SE_EVENT_BUS_HOST=selenium-hub
+      - SE_EVENT_BUS_PUBLISH_PORT=4442
+      - SE_EVENT_BUS_SUBSCRIBE_PORT=4443
+      - SE_NODE_GRID_URL=http://selenium-hub:4444
+    networks:
+      - ndsnet
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  firefox-node:
+    image: selenium/node-firefox:4.18.1
+    container_name: firefox-node
+    shm_size: 2g
+    depends_on:
+      - selenium-hub
+    environment:
+      - SE_EVENT_BUS_HOST=selenium-hub
+      - SE_EVENT_BUS_PUBLISH_PORT=4442
+      - SE_EVENT_BUS_SUBSCRIBE_PORT=4443
+      - SE_NODE_GRID_URL=http://selenium-hub:4444
+    networks:
+      - ndsnet
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
 volumes:
   postgres-db-volume:
 
 networks:
   ndsnet:
-    driver: bridge
+    external: true 

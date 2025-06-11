@@ -14,7 +14,7 @@
 
 sudo rm -rf dags logs plugins && mkdir -p dags logs plugins include config && sudo chown -R $(id -u):0 dags logs plugins include config
 
-- echo -e "AIRFLOW_UID=$(id -u)\nAIRFLOW_GID=0\nAIRFLOW__WEBSERVER__SECRET_KEY=$(openssl rand -hex 30)" > .env
+- echo -e "AIRFLOW_UID=$(id -u)\nAIRFLOW_GID=0\nHOSTNAME=localhost\nAIRFLOW__WEBSERVER__SECRET_KEY=$(openssl rand -hex 30)" > .env
 - rm -rf dags && mkdir -p dags logs plugins include config
 - sudo chown -R $(id -u):0 ./logs ./dags ./plugins ./include ./config requirements.txt
 - sudo chown -R $(id -u):0 .
@@ -34,6 +34,12 @@ docker compose -p airflow -f docker-compose-airflow.yaml up -d
 Migration Error
 docker volume rm airflow_postgres-db-volume
 이후 재시작
+
+## 새로 바뀜 - docker-compose.yaml
+docker-compose up -d
+docker-compose up -d airflow-webserver airflow-scheduler airflow-worker_1 airflow-worker_2 airflow-triggerer
+docker-compose up -d postgres redis minio
+docker-compose up -d selenium-hub chrome-node firefox-node
 
 1. **스토리지 레이어** (`docker-compose-storage.yaml`)
    - PostgreSQL: Airflow 메타데이터 저장소

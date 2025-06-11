@@ -15,7 +15,7 @@ from airflow.utils.decorators import apply_defaults
 class LottoExtractOperator(BaseOperator):
     @apply_defaults
     def __init__(self, minio_endpoint='localhost:9000', minio_access_key='minioadmin',
-                 minio_secret_key='minioadmin', minio_bucket='lotto-data', mode="full", *args, **kwargs):
+                 minio_secret_key='minioadmin', minio_bucket='lotto-data', mode="fullrefresh", *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.minio_endpoint = minio_endpoint
         self.minio_access_key = minio_access_key
@@ -74,7 +74,7 @@ class LottoExtractOperator(BaseOperator):
         api_url = "https://www.dhlottery.co.kr/gameResult.do?method=byWin&drwNo="
         data = []
         
-        if self.mode == "full":
+        if self.mode == "fullrefresh":
             for idx in range(1, int(self.recent_draw_no) + 1):
                 url = api_url + str(idx)
                 response = requests.get(url)

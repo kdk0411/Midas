@@ -3,6 +3,8 @@ requests
 minio==7.1.14
 apache-airflow-providers-docker==3.7.1
 apache-airflow-providers-slack==8.1.0
+apache-airflow-providers-microsoft-azure==8.0.0
+azure-mgmt-datafactory==1.0.0
 psycopg2-binary
 pymysql
 sqlalchemy
