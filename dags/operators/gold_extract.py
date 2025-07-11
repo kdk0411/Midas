@@ -9,7 +9,15 @@ from botocore.config import Config
 
 from airflow.models import BaseOperator
 from airflow.utils.decorators import apply_defaults
+
 class GoldExtractOperator(BaseOperator):
+    """
+    금값 데이터 추출 및 저장 Operator
+    - 직접 API 호출하여 데이터 추출
+    - 파일 존재 여부 확인 후 갱신/생성
+    - MinIO에 데이터 저장
+    """
+    
     @apply_defaults
     def __init__(
         self,
@@ -32,6 +40,8 @@ class GoldExtractOperator(BaseOperator):
     def s3_client_init(self):
         """
         S3 클라이언트 초기화 (MinIO 호환)
+        - boto3 클라이언트를 MinIO 엔드포인트로 설정
+        - S3v4 서명 방식 사용으로 MinIO 호환성 확보
         """
         s3_client = boto3.client(
             's3',
@@ -44,7 +54,7 @@ class GoldExtractOperator(BaseOperator):
         return s3_client
     
     def execute(self, context):
-        self.logger.info("금값 추출 시작")
+        self.logger.info("금값 데이터 추출 및 저장 시작")
         
         try:
             # 버킷이 없으면 생성
@@ -53,42 +63,120 @@ class GoldExtractOperator(BaseOperator):
             except:
                 self.s3_client.create_bucket(Bucket=self.minio_bucket)
 
+            # 공통 변수 초기화
+            file_exists = False
+            current_price_count = 0
+            previous_price_count = 0
+
             if self.mode == 'backfill':
                 api_url = "https://m.stock.naver.com/front-api/chart/pricesByPeriod?reutersCode=M04020000&category=metals&chartInfoType=gold&scriptChartType=day"
-                response = requests.get(api_url)
+                
+                # HTTP 요청 시도
+                try:
+                    response = requests.get(api_url, timeout=30)
+                    response.raise_for_status()
+                except requests.exceptions.RequestException as e:
+                    self.logger.error(f"API 요청 실패: {str(e)}")
+                    raise
+                
                 json_data = response.json()
+                
+                # API 응답 성공 여부 확인
                 if not json_data['isSuccess']:
-                    self.logger.error(f"API 호출 실패\nmessage: {json_data['message']}\ndetailCode: {json_data['detailCode']}")
+                    self.logger.error(f"API 호출 실패: {json_data['message']}")
                     return
-                if not json_data['result']['marketStatus'] == 'OPEN':
-                    self.logger.info(f"오늘 주식 시장이 열리지 않았습니다. 오늘 날짜의 데이터는 추출하지 않습니다.")
-                    return
-                # result 데이터만 추출하여 저장
+                
+                # result 데이터 추출
                 result_data = json_data['result']
-                current_date = result_data['tradeBaseAt'] # 20250604 형식
+                current_date = result_data['tradeBaseAt']
+                market_status = result_data.get('marketStatus', 'UNKNOWN')
+                
+                # 데이터 품질 검증
+                if not current_date:
+                    self.logger.error("tradeBaseAt 필드가 비어있습니다.")
+                    return
+                
+                if not result_data.get('priceInfos'):
+                    self.logger.warning(f"날짜 {current_date}의 가격 정보가 없습니다.")
+                    return
+                
+                self.logger.info(f"거래일: {current_date}, 시장상태: {market_status}")
                 file_name = f"gold_price_{current_date}.json"
+                
+                # MinIO에서 파일 존재 여부 확인
+                try:
+                    existing_obj = self.s3_client.get_object(Bucket=self.minio_bucket, Key=file_name)
+                    existing_data = json.loads(existing_obj['Body'].read().decode('utf-8'))
+                    previous_price_count = len(existing_data.get('priceInfos', []))
+                    file_exists = True
+                    self.logger.info(f"기존 파일 발견: {file_name} (기존 가격 정보: {previous_price_count}개)")
+                except self.s3_client.exceptions.NoSuchKey:
+                    self.logger.info(f"새로운 파일 생성: {file_name}")
+                except Exception as e:
+                    self.logger.info(f"파일 체크 중 오류 (새로 생성): {str(e)}")
+                
+                # 현재 데이터 통계
+                current_price_count = len(result_data.get('priceInfos', []))
+                
+                # 갱신 정보 로깅
+                if file_exists:
+                    price_diff = current_price_count - previous_price_count
+                    self.logger.info(f"데이터 갱신: {previous_price_count}개 → {current_price_count}개 (차이: {price_diff:+d}개)")
+                else:
+                    self.logger.info(f"첫 데이터 저장: {current_price_count}개 가격 정보")
+                
+                # 최신 가격 정보 로깅
+                if result_data.get('priceInfos'):
+                    latest_price_info = result_data['priceInfos'][-1]
+                    self.logger.info(f"최신 가격: {latest_price_info['currentPrice']:,}원 ({latest_price_info['localDateTime']})")
+                
             elif self.mode == 'fullrefresh':
                 api_url = "https://m.stock.naver.com/front-api/chart/pricesByPeriod?reutersCode=M04020000&category=metals&chartInfoType=gold&scriptChartType=areaYearFive"
-                response = requests.get(api_url)
+                
+                # HTTP 요청 시도
+                try:
+                    response = requests.get(api_url, timeout=30)
+                    response.raise_for_status()
+                except requests.exceptions.RequestException as e:
+                    self.logger.error(f"API 요청 실패: {str(e)}")
+                    raise
+                
                 json_data = response.json()
+                
                 if not json_data['isSuccess']:
-                    self.logger.error(f"API 호출 실패\nmessage: {json_data['message']}\ndetailCode: {json_data['detailCode']}")
+                    self.logger.error(f"API 호출 실패: {json_data['message']}")
                     return
+                
                 result_data = json_data['result']
                 current_date = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%d')
-                file_name = f"gold_price_FULL_REFRESH_{current_date}.json"                
+                file_name = f"gold_price_FULL_REFRESH_{current_date}.json"
+                current_price_count = len(result_data.get('priceInfos', []))
+                self.logger.info(f"전체 갱신 데이터: {current_price_count}개 가격 정보")
+                
             else:
                 raise ValueError(f"Invalid mode: {self.mode}")
-            # 데이터를 바로 저장
+            
+            # 데이터를 UTF-8 인코딩으로 저장
             self.s3_client.put_object(
                 Bucket=self.minio_bucket,
                 Key=file_name,
-                Body=json.dumps(result_data, ensure_ascii=False).encode('utf-8'),
+                Body=json.dumps(result_data, ensure_ascii=False, indent=2).encode('utf-8'),
+                ContentType='application/json; charset=utf-8'
             )
             
-            self.logger.info(f"추출된 금값을 MinIO에 저장 완료: {file_name}")
+            # 저장 완료 로그
+            if self.mode == 'backfill':
+                if file_exists:
+                    self.logger.info(f"금값 데이터 갱신 완료: {file_name}")
+                else:
+                    self.logger.info(f"금값 데이터 첫 저장 완료: {file_name}")
+                self.logger.info(f"총 저장된 가격 정보: {current_price_count}개")
+            else:
+                self.logger.info(f"금값 데이터 전체 갱신 완료: {file_name}")
+                self.logger.info(f"저장된 데이터 통계: priceInfos={len(result_data.get('priceInfos', []))}, lastPriceInfos={len(result_data.get('lastPriceInfos', []))}")
+            
             return file_name
             
         except Exception as e:
-            self.logger.error(f"금값 추출 중 오류 발생: {str(e)}")
+            self.logger.error(f"금값 데이터 추출 및 저장 중 오류 발생: {str(e)}")
             raise

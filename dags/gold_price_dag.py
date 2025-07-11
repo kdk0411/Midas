@@ -1,12 +1,12 @@
 import logging
 from airflow import DAG
 from airflow.models import Variable
-from airflow.operators.python_operator import PythonOperator
+from airflow.hooks.base import BaseHook
 from airflow.providers.docker.operators.docker import DockerOperator
 
-
-from operators.gold_extract import GoldExtractOperator
 from operators.gold_save import GoldSaveOperator
+from operators.gold_extract import GoldExtractOperator
+from sensor.gold_price_sensor import GoldPriceSensor
 
 from datetime import datetime, timedelta
 
@@ -25,17 +25,44 @@ def get_dag_config():
         logger.info(f"Running in fullrefresh mode")
         return {
             'schedule_interval': None,  # 스케줄링 비활성화
-            'catchup': False  # 이전 실행 비활성화
+            'catchup': False,  # 이전 실행 비활성화
+            'max_active_runs': 1,  # 동시 실행 DAG 인스턴스 수 제한
+            'max_active_tasks': 1  # 동시 실행 태스크 수 제한
         }
     elif GOLD_PRICE_MODE == "backfill":  # backfill 모드
         logger.info(f"Running in backfill mode")
         return {
-            'schedule_interval': '*/1 9-15 * * 1-5',  # 평일 9시부터 15시까지 1분마다
-            'catchup': False  # 이전 실행 비활성화
+            'schedule_interval': '*/1 9-15 * * 1-5',  # 평일 9시부터 15시까지 1분마다 (한국시간 기준)
+            'catchup': False,  # 이전 실행 비활성화
+            'max_active_runs': 1,  # 동시 실행 DAG 인스턴스 수 제한 (중복 실행 방지)
+            'max_active_tasks': 1  # 동시 실행 태스크 수 제한
         }
     else:
         logger.error(f"Invalid gold_price_mode: {GOLD_PRICE_MODE}")
         raise ValueError(f"Invalid gold_price_mode: {GOLD_PRICE_MODE}")
+
+def get_minio_conn(conn_id='minio'):
+    """
+    MinIO 연결 정보를 Airflow Connection에서 가져오는 함수
+    - Connection ID를 통해 엔드포인트, 접근 키, 비밀 키 획득
+    - 보안을 위해 하드코딩 대신 Connection 사용
+    """
+    conn = BaseHook.get_connection(conn_id)
+    # endpoint_url은 extra에 저장됨
+    endpoint = conn.extra_dejson.get('endpoint_url')
+    access_key = conn.login
+    secret_key = conn.password
+    return endpoint, access_key, secret_key
+
+minio_endpoint, minio_access_key, minio_secret_key = get_minio_conn('minio')
+
+# MinIO 설정
+minio_config = {
+    'minio_endpoint': minio_endpoint,
+    'minio_access_key': minio_access_key,
+    'minio_secret_key': minio_secret_key,
+    'minio_bucket': 'gold-data'
+}
 
 default_args = {
     'owner': 'kdk0411',
@@ -45,15 +72,8 @@ default_args = {
     'email_on_retry': False,
     'retries': 3,
     'retry_delay': timedelta(minutes=5),
-    'queue': 'a-worker_1'  # a-worker_1 queue 사용
-}
-
-# MinIO 설정
-minio_config = {
-    'minio_endpoint': 'localhost:9000',
-    'minio_access_key': 'minioadmin',
-    'minio_secret_key': 'minioadmin',
-    'minio_bucket': 'gold-data'
+    'task_concurrency': 1,  # 동일한 태스크의 동시 실행 수 제한
+    'pool_slots': 1,  # 리소스 풀 슬롯 사용량 제한
 }
 
 # Selenium Grid 설정
@@ -67,15 +87,25 @@ dag_config = get_dag_config()
 dag = DAG(
     'gold_price_pipeline',
     default_args=default_args,
-    description='금값 시세 크롤링 및 저장 파이프라인',
+    description='금값 시세 데이터 가용성 확인 및 저장 파이프라인',
     **dag_config
 )
 
-# Extract Task
+# Sensor Task - 데이터 가용성 확인
+sensor_task = GoldPriceSensor(
+    task_id='gold_price_sensor',
+    mode=GOLD_PRICE_MODE,
+    check_market_status=True,  # 시장 상태 확인 여부
+    poke_interval=30,  # 30초마다 확인
+    timeout=300,  # 5분 타임아웃
+    dag=dag
+)
+
+# Extract Task - 데이터 저장
 extract_task = GoldExtractOperator(
     task_id='extract_gold_price',
+    mode=GOLD_PRICE_MODE,  # 모드 직접 전달
     dag=dag,
-    mode=Variable.get("gold_price_mode", "backfill"),  # Airflow Variable에서 모드 가져오기
     **minio_config
 )
 
@@ -104,6 +134,5 @@ extract_task = GoldExtractOperator(
 #     **minio_config
 # )
 
-# # Task 의존성 설정
-# extract_task >> transform_task >> save_task
-extract_task
+# Task 의존성 설정 - Sensor 먼저 실행 후 Extract 실행
+sensor_task >> extract_task

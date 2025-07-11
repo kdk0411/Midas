@@ -6,8 +6,10 @@
 
 ## 아키텍처 구성
 
-인프라는 다음과 같이 4개의 주요 레이어로 분리되어 있습니다:
-필수 
+인프라는 다음과 같이 3개의 주요 레이어로 분리되어 있습니다:
+
+## 설정
+#### 필수 
 1. ndsnet 네트워크 생성이 필요함
 - docker network create ndsnet
 2. 파일 권한 -> 아래 2중 1택
@@ -19,29 +21,22 @@ sudo rm -rf dags logs plugins && mkdir -p dags logs plugins include config && su
 - sudo chown -R $(id -u):0 ./logs ./dags ./plugins ./include ./config requirements.txt
 - sudo chown -R $(id -u):0 .
 
-Airflow와 Storage는 의존성 문제로 아래 명령어로 실행해야 한다.
-docker compose --env-file .env -p airflow -f docker-compose-storage.yaml -f docker-compose-airflow.yaml up -d
-# --env-file .env : .env 파일을 envfile로 지정
-# -p airflow : Project Name을 airflow로 지정
-# -f : yaml 파일을 지정해서 사용
-이미 실행 했다면 아래 명령어
-docker compose -p airflow -f docker-compose-storage.yaml -f docker-compose-airflow.yaml down
-
-각각 실행 - storage가 완벽하게 실행되면 airflow를 실행
-docker compose -p airflow -f docker-compose-storage.yaml up -d
-docker compose -p airflow -f docker-compose-airflow.yaml up -d
-
-Migration Error
+#### Migration Error
 docker volume rm airflow_postgres-db-volume
 이후 재시작
 
-## 새로 바뀜 - docker-compose.yaml
-docker-compose up -d
-docker-compose up -d airflow-webserver airflow-scheduler airflow-worker_1 airflow-worker_2 airflow-triggerer
-docker-compose up -d postgres redis minio
-docker-compose up -d selenium-hub chrome-node firefox-node
+#### docker-compose.yaml - Container 올리기
+docker-compose -p airflow up -d
 
-1. **스토리지 레이어** (`docker-compose-storage.yaml`)
+1. **오케스트레이션 레이어** (`docker-compose.yaml`)
+   - Airflow Webserver: UI 및 DAG 관리
+   - Airflow Scheduler: 작업 스케줄링
+   - Airflow Worker: 작업 실행
+   - Airflow Triggerer: 이벤트 기반 작업 처리
+   - echo "AIRFLOW_UID=$(id -u)" > .env -> 파일 권한 문제 방지 환경 변수 설정
+   - docker compose -f docker-compose-airflow.yaml up -d
+   - Flower 실행 방법 -> --profile flower 옵션 추가
+      - docker compose -p airflow -f docker-compose-airflow.yaml up -d
    - PostgreSQL: Airflow 메타데이터 저장소
    - Redis: Airflow 작업 큐
    - MinIO: 객체 스토리지 (S3 호환)
@@ -53,21 +48,11 @@ docker-compose up -d selenium-hub chrome-node firefox-node
      - \d Table_name: 테이블 구조 보기
      - \q : psql 종료
 
-2. **오케스트레이션 레이어** (`docker-compose-airflow.yaml`)
-   - Airflow Webserver: UI 및 DAG 관리
-   - Airflow Scheduler: 작업 스케줄링
-   - Airflow Worker: 작업 실행
-   - Airflow Triggerer: 이벤트 기반 작업 처리
-   - echo "AIRFLOW_UID=$(id -u)" > .env -> 파일 권한 문제 방지 환경 변수 설정
-   - docker compose -f docker-compose-airflow.yaml up -d
-   - Flower 실행 방법 -> --profile flower 옵션 추가
-      - docker compose -p airflow -f docker-compose-airflow.yaml up -d
-
-3. **데이터 처리 레이어** (`docker-compose-processing.yaml`)
+2. **데이터 처리 레이어** (`docker-compose-processing.yaml`)
    - Spark Master: 분산 처리 관리
    - Spark Worker: 작업 실행
 
-4. **모니터링 레이어** (`docker-compose-monitoring.yaml`)
+3. **모니터링 레이어** (`docker-compose-monitoring.yaml`)
    - Elasticsearch: 로그 데이터 저장
    - Kibana: 로그 시각화
    - Logstash: 로그 수집

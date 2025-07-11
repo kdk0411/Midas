@@ -1,12 +1,10 @@
 import logging
 from airflow import DAG
 from airflow.models import Variable
-from airflow.operators.python_operator import PythonOperator
+from airflow.hooks.base import BaseHook
 from airflow.providers.docker.operators.docker import DockerOperator
 
-
 from operators.lotto_extract import LottoExtractOperator
-
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
@@ -36,6 +34,24 @@ def get_dag_config():
         logger.error(f"Invalid lotto_mode: {LOTTO_MODE}")
         raise ValueError(f"Invalid lotto_mode: {LOTTO_MODE}")
 
+def get_minio_conn(conn_id='minio'):
+    conn = BaseHook.get_connection(conn_id)
+    # endpoint_url은 extra에 저장됨
+    endpoint = conn.extra_dejson.get('endpoint_url')
+    access_key = conn.login
+    secret_key = conn.password
+    return endpoint, access_key, secret_key
+
+minio_endpoint, minio_access_key, minio_secret_key = get_minio_conn('minio')
+
+# MinIO 설정
+minio_config = {
+    'minio_endpoint': minio_endpoint,
+    'minio_access_key': minio_access_key,
+    'minio_secret_key': minio_secret_key,
+    'minio_bucket': 'lotto-data'
+}
+
 default_args = {
     'owner': 'kdk0411',
     'depends_on_past': False,  # 이전 실행 의존성 제거
@@ -44,15 +60,6 @@ default_args = {
     'email_on_retry': False,
     'retries': 3,
     'retry_delay': timedelta(minutes=5),
-    'queue': 'a-worker_2'  # 특정 worker 지정
-}
-
-# MinIO 설정
-minio_config = {
-    'minio_endpoint': 'localhost:9000',
-    'minio_access_key': 'minioadmin',
-    'minio_secret_key': 'minioadmin',
-    'minio_bucket': 'lotto-data'
 }
 
 dag_config = get_dag_config()
@@ -68,7 +75,7 @@ dag = DAG(
 extract_task = LottoExtractOperator(
     task_id='extract_lotto_data',
     dag=dag,
-    mode=Variable.get("lotto_mode", "backfill"),  # Airflow Variable에서 모드 가져오기
+    mode=LOTTO_MODE,  # Airflow Variable에서 모드 가져오기
     **minio_config
 )
 
