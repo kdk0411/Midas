@@ -14,20 +14,13 @@ from airflow.utils.decorators import apply_defaults
 
 class LottoExtractOperator(BaseOperator):
     @apply_defaults
-    def __init__(self, minio_endpoint='localhost:9000', minio_access_key='minioadmin',
-                 minio_secret_key='minioadmin', minio_bucket='lotto-data', mode="fullrefresh", *args, **kwargs):
+    def __init__(self, minio_config=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.minio_endpoint = minio_endpoint
-        self.minio_access_key = minio_access_key
-        self.minio_secret_key = minio_secret_key
-        self.minio_bucket = minio_bucket
+        self.minio_endpoint = minio_config["minio_endpoint"]
+        self.minio_access_key = minio_config["minio_access_key"]
+        self.minio_secret_key = minio_config["minio_secret_key"]
+        self.minio_bucket = minio_config["minio_bucket"]
         self.logger = logging.getLogger(__name__)
-        """
-        mode:
-            - Full: 전체 데이터 추출
-            - Backfill: 최근 데이터 추출
-        """
-        self.mode = mode
 
     def _s3_bucket_init(self):
         # boto3 클라이언트 초기화
@@ -48,17 +41,24 @@ class LottoExtractOperator(BaseOperator):
         url = "https://www.dhlottery.co.kr/common.do?method=main"
         response = requests.get(url)
         soup = BeautifulSoup(response.text, 'html.parser')
-        self.recent_draw_no = soup.find("strong", id="lottoDrwNo").text.strip()
+        
+        # None 체크 추가
+        draw_no_element = soup.find("strong", id="lottoDrwNo")
+        if draw_no_element is None:
+            raise Exception("최근 회차 번호를 찾을 수 없습니다. 웹사이트 구조가 변경되었을 수 있습니다.")
+        
+        self.recent_draw_no = draw_no_element.text.strip()
+        self.logger.info(f"최근 회차 번호: {self.recent_draw_no}")
     
     def _save_to_bucket(self, data, file_name):
         try:
-            # DataFrame을 CSV 형식의 문자열로 변환
-            csv_data = data.to_csv(index=False)
+            # 데이터를 JSON 형식으로 변환
+            json_data = json.dumps(data, ensure_ascii=False, indent=2)
             self.s3_client.put_object(
                 Bucket=self.minio_bucket,
                 Key=file_name,
-                Body=csv_data,
-                ContentType='text/csv'
+                Body=json_data.encode('utf-8'),
+                ContentType='application/json'
             )
             self.logger.info(f"추출된 로또 데이터를 MinIO에 저장 완료: {file_name}")
         except Exception as e:
@@ -70,75 +70,76 @@ class LottoExtractOperator(BaseOperator):
         
         self._s3_bucket_init()
         self._get_recent_draw_no()
-        # 로또 API 호출
-        api_url = "https://www.dhlottery.co.kr/gameResult.do?method=byWin&drwNo="
-        data = []
         
-        if self.mode == "fullrefresh":
-            for idx in range(1, int(self.recent_draw_no) + 1):
-                url = api_url + str(idx)
-                response = requests.get(url)
-                soup = BeautifulSoup(response.text, 'html.parser')
-                
-                try:
-                    # 추첨일
-                    draw_date = soup.select_one("p.desc").text.strip()
-                    draw_date = draw_date.replace("년 ", "-") \
-                            .replace("월 ", "-") \
-                            .replace("일 추첨", "") \
-                            .replace("(", "") \
-                            .replace(")", "")
-                    
-                    target_div = soup.select("div.win span.ball_645")
-                    # 당첨번호
-                    numbers = [int(ball.text.strip()) for ball in target_div]
-                    # 보너스
-                    bonus = int(soup.select_one("div.num.bonus span.ball_645").text.strip())
-                    
-                    row = {
-                        "draw_no": idx,
-                        "draw_date": draw_date,
-                        "num_1": numbers[0],
-                        "num_2": numbers[1],
-                        "num_3": numbers[2],
-                        "num_4": numbers[3],
-                        "num_5": numbers[4],
-                        "num_6": numbers[5],
-                        "bonus": bonus
-                    }
-                    data.append(row)
-                    self.logger.info(f"{idx}회차 데이터 추출 완료")
-                    time.sleep(0.2)
-                except Exception as e:
-                    self.logger.error(f"{idx}회차 데이터 추출 중 오류 발생: {str(e)}")
-                    continue
-        elif self.mode == "backfill":
-            try:
-                url = f"https://www.dhlottery.co.kr/common.do?method=getLottoNumber&drwNo={self.recent_draw_no}"
-                response = requests.get(url)
-                soup = BeautifulSoup(response.text, 'html.parser')
-                target_div = soup.select("div.win span.ball_645")
-                numbers = [int(ball.text.strip()) for ball in target_div]
-                bonus = int(soup.select_one("div.num.bonus span.ball_645").text.strip())
-                row = {
-                    "draw_no": self.recent_draw_no,
-                    "draw_date": draw_date,
-                    "num_1": numbers[0],
-                    "num_2": numbers[1],
-                    "num_3": numbers[2],
-                    "num_4": numbers[3],
-                    "num_5": numbers[4],
-                    "num_6": numbers[5],
-                    "bonus": bonus
-                }
-                data.append(row)
-            except Exception as e:
-                self.logger.error(f"최근 회차 데이터 추출 중 오류 발생: {str(e)}")
-                return
-        else:
-            self.logger.error("유효하지 않은 모드입니다.")
-            return
-        df = pd.DataFrame(data)
-        file_name = f"lotto_data_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-        self._save_to_bucket(df, file_name)
+        # 현재 날짜를 가져와서 파일명에 사용
+        current_date = datetime.datetime.now().strftime('%Y-%m-%d')
+        
+        # 로또 API 호출 (JSON API 사용)
+        data = []
+        try:
+            url = f"https://www.dhlottery.co.kr/common.do?method=getLottoNumber&drwNo={self.recent_draw_no}"
+            response = requests.get(url)
+            
+            # JSON 응답 파싱
+            if response.status_code != 200:
+                raise Exception(f"API 요청 실패: HTTP {response.status_code}")
+            
+            lotto_data = response.json()
+            
+            # returnValue 검증
+            if lotto_data.get('returnValue') != 'success':
+                raise Exception(f"API 응답 오류: {lotto_data.get('returnValue')}")
+            
+            # drwNo 검증
+            api_draw_no = str(lotto_data.get('drwNo'))
+            if api_draw_no != self.recent_draw_no:
+                raise Exception(f"회차 번호 불일치: API={api_draw_no}, 최근회차={self.recent_draw_no}")
+            
+            # 로또 번호 추출
+            numbers = [
+                lotto_data["drwtNo1"],
+                lotto_data["drwtNo2"],
+                lotto_data["drwtNo3"],
+                lotto_data["drwtNo4"],
+                lotto_data["drwtNo5"],
+                lotto_data["drwtNo6"]
+            ]
+            
+            # None 값 체크
+            if any(num is None for num in numbers):
+                raise Exception("로또 번호 중 None 값이 있습니다.")
+            
+            bonus = lotto_data.get('bnusNo')
+            if bonus is None:
+                raise Exception("보너스 번호가 None입니다.")
+            
+            draw_date = lotto_data["drwNoDate"]
+            
+            row = {
+                "draw_no": self.recent_draw_no,
+                "draw_date": draw_date,
+                "num_1": numbers[0],
+                "num_2": numbers[1],
+                "num_3": numbers[2],
+                "num_4": numbers[3],
+                "num_5": numbers[4],
+                "num_6": numbers[5],
+                "bonus": bonus,
+                "extraction_timestamp": datetime.datetime.now().isoformat(),
+                "total_sell_amount": lotto_data["totSellamnt"],
+                "first_win_amount": lotto_data["firstWinamnt"],
+                "first_winner_count": lotto_data["firstPrzwnerCo"],
+                "first_accum_amount": lotto_data["firstAccumamnt"]
+            }
+            data.append(row)
+            self.logger.info(f"로또 데이터 추출 성공: 회차 {self.recent_draw_no}, 번호: {numbers}, 보너스: {bonus}")
+            
+        except Exception as e:
+            self.logger.error(f"최근 회차 데이터 추출 중 오류 발생: {str(e)}")
+            # 오류 발생 시에도 빈 데이터로 파일 생성
+            data = []
+        
+        # 날짜별로 JSON 파일 저장
+        file_key = f"lotto_data_{current_date}.json"
+        self._save_to_bucket(data, file_key)
         self.logger.info("로또 데이터 추출 완료")

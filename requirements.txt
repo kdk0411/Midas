@@ -1,5 +1,6 @@
 pandas
 requests
+beautifulsoup4
 minio==7.1.14
 apache-airflow-providers-docker==3.7.1
 apache-airflow-providers-slack==8.1.0

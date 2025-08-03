@@ -7,6 +7,7 @@ from operators.gold_extract import GoldExtractOperator
 from operators.gold_transform import GoldTransformOperator
 
 from datetime import datetime, timedelta
+import pytz
 
 logger = logging.getLogger(__name__)
 
@@ -33,10 +34,13 @@ minio_config = {
     'minio_bucket': 'gold-data'
 }
 
+# 한국 시간대 설정
+kst = pytz.timezone('Asia/Seoul')
+
 default_args = {
     'owner': 'kdk0411',
     'depends_on_past': False,  # 이전 실행 의존성 제거
-    'start_date': datetime(2025, 6, 4),
+    'start_date': datetime(2024, 1, 1, tzinfo=kst),  # 한국 시간 기준
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 3,
@@ -57,7 +61,7 @@ with DAG(
     'gold_price_pipeline',
     default_args=default_args,
     description='금값 시세 데이터 가용성 확인 및 저장 파이프라인',
-    schedule_interval='*/1 9-15 * * 1-5',  # 평일 9시부터 15시까지 1분마다 (한국시간 기준)
+    schedule_interval='0 * 9-15 * * 1-5',  # 평일 9시부터 15시까지 1분마다 (한국 시간)
     catchup=False,  # 이전 실행 비활성화
     max_active_runs=1,  # 동시 실행 DAG 인스턴스 수 제한 (중복 실행 방지)
     max_active_tasks=1  # 동시 실행 태스크 수 제한

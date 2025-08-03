@@ -9,6 +9,7 @@ from botocore.config import Config
 from airflow.models import BaseOperator
 
 from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
 
 class GoldSaveOperator(BaseOperator):
     def __init__(self, minio_config=None, *args, **kwargs):
@@ -47,7 +48,7 @@ class GoldSaveOperator(BaseOperator):
         )
         return s3_client
     
-    def create_table_if_not_exists(self, engine):
+    def create_table_if_not_exists(self, session):
         """
         gold_price 테이블이 존재하지 않으면 생성
         """
@@ -60,15 +61,15 @@ class GoldSaveOperator(BaseOperator):
         );
         """
         try:
-            with engine.connect() as connection:
-                connection.execute(text(create_query))
-                connection.commit()
-                self.logger.info("gold_price 테이블이 성공적으로 생성되었습니다.")
+            session.execute(text(create_query))
+            session.commit()
+            self.logger.info("gold_price 테이블이 성공적으로 생성되었습니다.")
         except Exception as e:
+            session.rollback()
             self.logger.error(f"테이블 생성 중 오류 발생: {str(e)}")
             raise
     
-    def check_table_exists(self, engine):
+    def check_table_exists(self, session):
         """
         gold_price 테이블 존재 여부 확인
         """
@@ -81,14 +82,13 @@ class GoldSaveOperator(BaseOperator):
         """
         
         try:
-            with engine.connect() as connection:
-                result = connection.execute(text(check_table_sql))
-                exists = result.scalar()
-                if exists:
-                    self.logger.info("gold_price 테이블이 이미 존재합니다.")
-                else:
-                    self.logger.info("gold_price 테이블이 존재하지 않습니다.")
-                return exists
+            result = session.execute(text(check_table_sql))
+            exists = result.scalar()
+            if exists:
+                self.logger.info("gold_price 테이블이 이미 존재합니다.")
+            else:
+                self.logger.info("gold_price 테이블이 존재하지 않습니다.")
+            return exists
         except Exception as e:
             self.logger.error(f"테이블 존재 여부 확인 중 오류 발생: {str(e)}")
             raise
@@ -115,9 +115,9 @@ class GoldSaveOperator(BaseOperator):
             self.logger.error(f"데이터 검증 실패: {str(e)}, 데이터: {row}")
             return False
     
-    def insert_data_safely(self, engine, df):
+    def insert_data_safely(self, session, df):
         """
-        데이터를 안전하게 삽입 (트랜잭션 관리)
+        데이터를 안전하게 삽입 (Session 기반 트랜잭션 관리)
         """
         inserted_count = 0
         error_count = 0
@@ -134,54 +134,53 @@ class GoldSaveOperator(BaseOperator):
         """
         
         try:
-            with engine.begin() as connection:  # 자동 트랜잭션 관리
-                for index, row in df.iterrows():
-                    try:
-                        # 데이터 검증
-                        if not self.validate_data(row):
-                            error_count += 1
-                            continue
-                        
-                        # 데이터 삽입/업데이트
-                        connection.execute(text(upsert_sql), {
-                            'localDateTime': row['localDateTime'],
-                            'currentPrice': row['currentPrice'],
-                            'accumulatedTradingVolume': row['accumulatedTradingVolume']
-                        })
-                        
-                        inserted_count += 1
-                        
-                        # 100개마다 로그 출력
-                        if inserted_count % 100 == 0:
-                            self.logger.info(f"중간 처리 완료: {inserted_count}개 처리됨")
-                        
-                    except Exception as e:
-                        self.logger.error(f"행 {index} 삽입 중 오류: {str(e)}, 데이터: {row}")
+            for index, row in df.iterrows():
+                try:
+                    # 데이터 검증
+                    if not self.validate_data(row):
                         error_count += 1
-                        # 개별 행 오류는 계속 진행하되 로그 기록
-                
-                # 트랜잭션이 성공적으로 커밋됨
-                self.logger.info(f"트랜잭션 커밋 완료: {inserted_count}개 성공, {error_count}개 실패")
+                        continue
+                    
+                    # 데이터 삽입/업데이트
+                    session.execute(text(upsert_sql), {
+                        'localDateTime': row['localDateTime'],
+                        'currentPrice': row['currentPrice'],
+                        'accumulatedTradingVolume': row['accumulatedTradingVolume']
+                    })
+                    
+                    inserted_count += 1
+                    
+                    # 100개마다 로그 출력
+                    if inserted_count % 100 == 0:
+                        self.logger.info(f"중간 처리 완료: {inserted_count}개 처리됨")
+                    
+                except Exception as e:
+                    self.logger.error(f"행 {index} 삽입 중 오류: {str(e)}, 데이터: {row}")
+                    error_count += 1
+                    # 개별 행 오류는 계속 진행하되 로그 기록
+            
+            # 모든 데이터 삽입 후 커밋
+            session.commit()
+            self.logger.info(f"트랜잭션 커밋 완료: {inserted_count}개 성공, {error_count}개 실패")
                 
         except Exception as e:
+            session.rollback()
             self.logger.error(f"트랜잭션 실행 중 오류 발생: {str(e)}")
-            # engine.begin()이 자동으로 롤백을 처리함
             raise
         
         return inserted_count, error_count
     
-    def get_table_count(self, engine):
+    def get_table_count(self, session):
         """
         테이블의 총 레코드 수 조회
         """
         count_sql = "SELECT COUNT(*) FROM gold_price;"
         
         try:
-            with engine.connect() as connection:
-                result = connection.execute(text(count_sql))
-                count = result.scalar()
-                self.logger.info(f"테이블 총 레코드 수: {count}")
-                return count
+            result = session.execute(text(count_sql))
+            count = result.scalar()
+            self.logger.info(f"테이블 총 레코드 수: {count}")
+            return count
         except Exception as e:
             self.logger.error(f"레코드 수 조회 중 오류 발생: {str(e)}")
             raise
@@ -238,7 +237,9 @@ class GoldSaveOperator(BaseOperator):
         # PostgreSQL 연결 URL
         postgres_url = "postgresql://postgres:postgres@localhost:5432/price_db"
         
+        # Engine과 Session 생성
         engine = None
+        session = None
         
         try:
             # MinIO에서 데이터 읽기
@@ -248,27 +249,32 @@ class GoldSaveOperator(BaseOperator):
                 self.logger.warning("삽입할 데이터가 없습니다.")
                 return
             
-            # 데이터베이스 연결
+            # 데이터베이스 연결 및 Session 생성
             engine = create_engine(postgres_url)
+            Session = sessionmaker(bind=engine)
+            session = Session()
             
             # 테이블 존재 여부 확인 및 생성
-            if not self.check_table_exists(engine):
-                self.create_table_if_not_exists(engine)
+            if not self.check_table_exists(session):
+                self.create_table_if_not_exists(session)
             
             self.logger.info(f"총 {len(df)}개의 데이터를 처리합니다.")
             
             # 데이터 삽입
-            inserted_count, error_count = self.insert_data_safely(engine, df)
+            inserted_count, error_count = self.insert_data_safely(session, df)
             
             self.logger.info(f"데이터 저장 완료: 성공 {inserted_count}개, 실패 {error_count}개")
             
             # 결과 검증
-            self.get_table_count(engine)
+            self.get_table_count(session)
             
         except Exception as e:
             self.logger.error(f"데이터 저장 중 오류 발생: {str(e)}")
             raise
         finally:
+            # Session과 Engine 정리
+            if session:
+                session.close()
             if engine:
                 engine.dispose()
             self.logger.info("데이터베이스 연결이 정리되었습니다.") 
