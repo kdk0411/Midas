@@ -1,11 +1,10 @@
 import io
+import boto3
 import logging
 import datetime
 import pandas as pd
 
-import boto3
 from botocore.config import Config
-
 from airflow.models import BaseOperator
 
 from sqlalchemy import create_engine, text

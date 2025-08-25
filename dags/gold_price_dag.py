@@ -1,28 +1,14 @@
+import pytz
 import logging
+import datetime
 from airflow import DAG
-from airflow.hooks.base import BaseHook
 
+from minio.minio import get_minio_conn
 from operators.gold_save import GoldSaveOperator
 from operators.gold_extract import GoldExtractOperator
 from operators.gold_transform import GoldTransformOperator
 
-from datetime import datetime, timedelta
-import pytz
-
 logger = logging.getLogger(__name__)
-
-def get_minio_conn(conn_id='minio'):
-    """
-    MinIO 연결 정보를 Airflow Connection에서 가져오는 함수
-    - Connection ID를 통해 엔드포인트, 접근 키, 비밀 키 획득
-    - 보안을 위해 하드코딩 대신 Connection 사용
-    """
-    conn = BaseHook.get_connection(conn_id)
-    # endpoint_url은 extra에 저장됨
-    endpoint = conn.extra_dejson.get('endpoint_url')
-    access_key = conn.login
-    secret_key = conn.password
-    return endpoint, access_key, secret_key
 
 minio_endpoint, minio_access_key, minio_secret_key = get_minio_conn()
 
@@ -40,11 +26,11 @@ kst = pytz.timezone('Asia/Seoul')
 default_args = {
     'owner': 'kdk0411',
     'depends_on_past': False,  # 이전 실행 의존성 제거
-    'start_date': datetime(2024, 1, 1, tzinfo=kst),  # 한국 시간 기준
+    'start_date': datetime.datetime(2024, 1, 1, tzinfo=kst),  # 한국 시간 기준
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 3,
-    'retry_delay': timedelta(minutes=5),
+    'retry_delay': datetime.timedelta(minutes=5),
     'task_concurrency': 1,  # 동일한 태스크의 동시 실행 수 제한
     'pool_slots': 1,  # 리소스 풀 슬롯 사용량 제한
 }
@@ -60,7 +46,7 @@ selenium_config = {
 with DAG(
     'gold_price_pipeline',
     default_args=default_args,
-    description='금값 시세 데이터 가용성 확인 및 저장 파이프라인',
+    description='금값 데이터 파이프라인',
     schedule_interval='0 * 9-15 * * 1-5',  # 평일 9시부터 15시까지 1분마다 (한국 시간)
     catchup=False,  # 이전 실행 비활성화
     max_active_runs=1,  # 동시 실행 DAG 인스턴스 수 제한 (중복 실행 방지)

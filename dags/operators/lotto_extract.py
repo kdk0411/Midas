@@ -38,17 +38,27 @@ class LottoExtractOperator(BaseOperator):
             self.s3_client.create_bucket(Bucket=self.minio_bucket)
     
     def _get_recent_draw_no(self):
-        url = "https://www.dhlottery.co.kr/common.do?method=main"
-        response = requests.get(url)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # None 체크 추가
-        draw_no_element = soup.find("strong", id="lottoDrwNo")
-        if draw_no_element is None:
-            raise Exception("최근 회차 번호를 찾을 수 없습니다. 웹사이트 구조가 변경되었을 수 있습니다.")
-        
-        self.recent_draw_no = draw_no_element.text.strip()
-        self.logger.info(f"최근 회차 번호: {self.recent_draw_no}")
+        for i in range(1, 10):
+            try:
+                url = "https://www.dhlottery.co.kr/common.do?method=main"
+                response = requests.get(url)
+                soup = BeautifulSoup(response.text, 'html.parser')
+                
+                # None 체크 추가
+                draw_no_element = soup.find("strong", id="lottoDrwNo")
+                if draw_no_element is None:
+                    self.logger.info("최근 회차 번호를 찾을 수 없습니다. 웹사이트 구조가 변경되었을 수 있습니다.")
+                    self.logger.info("10초 후 다시 시도")
+                    time.sleep(10)
+                    continue
+                self.recent_draw_no = draw_no_element.text.strip()
+                self.logger.info(f"최근 회차 번호: {self.recent_draw_no}")
+                break
+            except:
+                self.logger.info("최근 회차 번호를 찾을 수 없습니다. 웹사이트 구조가 변경되었을 수 있습니다.")
+                self.logger.info("10초 후 다시 시도")
+                time.sleep(10)
+                continue
     
     def _save_to_bucket(self, data, file_name):
         try:

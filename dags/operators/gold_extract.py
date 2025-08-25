@@ -17,7 +17,7 @@ class GoldExtractOperator(BaseOperator):
     - MinIO에 데이터 저장
     """
     
-    def __init__(self, minio_config=None, mode='backfill', *args, **kwargs):
+    def __init__(self, minio_config=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.logger = logging.getLogger(__name__)
         
@@ -141,18 +141,11 @@ class GoldExtractOperator(BaseOperator):
                 Body=json.dumps(result_data, ensure_ascii=False, indent=2).encode('utf-8'),
                 ContentType='application/json; charset=utf-8'
             )
-            
-            # 저장 완료 로그
-            if self.mode == 'backfill':
-                if file_exists:
+            if file_exists:
                     self.logger.info(f"금값 데이터 갱신 완료: {file_name}")
-                else:
-                    self.logger.info(f"금값 데이터 첫 저장 완료: {file_name}")
-                self.logger.info(f"총 저장된 가격 정보: {current_price_count}개")
             else:
-                self.logger.info(f"금값 데이터 전체 갱신 완료: {file_name}")
-                self.logger.info(f"저장된 데이터 통계: priceInfos={len(result_data.get('priceInfos', []))}, lastPriceInfos={len(result_data.get('lastPriceInfos', []))}")
-            
+                self.logger.info(f"금값 데이터 첫 저장 완료: {file_name}")
+            self.logger.info(f"총 저장된 가격 정보: {current_price_count}개")
             return file_name
             
         except Exception as e:
