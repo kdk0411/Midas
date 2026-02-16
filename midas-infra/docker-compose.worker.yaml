@@ -1,0 +1,130 @@
+x-airflow-common:
+  &airflow-common
+  image: apache/airflow:3.0.0
+  environment:
+    &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+    # AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://midas_admin:YOUR_DB_PASSWORD@your-rds-endpoint.ap-northeast-2.rds.amazonaws.com:5432/airflow_db
+    # AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://midas_admin:YOUR_DB_PASSWORD@your-rds-endpoint.ap-northeast-2.rds.amazonaws.com:5432/airflow_db
+    # AIRFLOW__CELERY__BROKER_URL: redis://:@your-redis-endpoint.cache.amazonaws.com:6379/0
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://midas_admin:test123@test-postgres:5432/airflow_db
+    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://midas_admin:test123@test-postgres:5432/airflow_db
+    AIRFLOW__CELERY__BROKER_URL: redis://:@test-redis:6379/0
+    AIRFLOW__CORE__FERNET_KEY: 'IvPgCdkJkiHNTtltLuZzsQeFI2HTb-ly7h1U2HLk7_U='
+    AIRFLOW__CORE__DEFAULT_TIMEZONE: 'Asia/Seoul'
+    AIRFLOW__CELERY__WORKER_CONCURRENCY: 4
+    AIRFLOW__CELERY__WORKER_PREFETCH_MULTIPLIER: 1
+    AIRFLOW__CELERY__TASK_TRACK_STARTED: 'true'
+    AIRFLOW__CELERY__TASK_TIME_LIMIT: 7200
+    AIRFLOW__CELERY__TASK_SOFT_TIME_LIMIT: 6600
+    _PIP_ADDITIONAL_REQUIREMENTS: >-
+      apache-airflow-providers-postgres==5.12.0
+      apache-airflow-providers-redis==3.8.0
+      apache-airflow-providers-celery==3.8.0
+      apache-airflow-providers-amazon==8.28.0
+      apache-airflow-providers-http==4.12.0
+      psycopg2-binary==2.9.9
+      redis==5.1.1
+      pandas==2.2.0
+      numpy==1.26.4
+      requests==2.32.3
+      yfinance==0.2.40
+      ccxt==4.3.50
+      boto3==1.35.0
+    AWS_DEFAULT_REGION: ap-northeast-2
+    DUMB_INIT_SETSID: "0"
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./logs:/opt/airflow/logs
+    - ./plugins:/opt/airflow/plugins
+    - ./config:/opt/airflow/config
+    - ./include:/opt/airflow/include
+  user: "50000:0"
+  restart: always
+
+services:
+  finance-worker:
+    container_name: midas-finance-worker
+    hostname: finance-worker
+    <<: *airflow-common
+    command: celery worker --queues=finance --concurrency=4 --hostname=finance-worker@%h
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - 'celery --app airflow.providers.celery.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}" || celery --app airflow.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}"'
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    environment:
+      <<: *airflow-common-env
+    networks:
+      - midas-network
+
+  coin-worker:
+    container_name: midas-coin-worker
+    hostname: coin-worker
+    <<: *airflow-common
+    command: celery worker --queues=coin --concurrency=4 --hostname=coin-worker@%h
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - 'celery --app airflow.providers.celery.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}" || celery --app airflow.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}"'
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    environment:
+      <<: *airflow-common-env
+    networks:
+      - midas-network
+
+  info-worker:
+    container_name: midas-info-worker
+    hostname: info-worker
+    <<: *airflow-common
+    command: celery worker --queues=info --concurrency=4 --hostname=info-worker@%h
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - 'celery --app airflow.providers.celery.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}" || celery --app airflow.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}"'
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    environment:
+      <<: *airflow-common-env
+    networks:
+      - midas-network
+
+  default-worker:
+    container_name: midas-default-worker
+    hostname: default-worker
+    <<: *airflow-common
+    command: celery worker --queues=default --concurrency=2 --hostname=default-worker@%h
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - 'celery --app airflow.providers.celery.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}" || celery --app airflow.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}"'
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    environment:
+      <<: *airflow-common-env
+    networks:
+      - midas-network
+
+# networks:
+#   midas-network:
+#     driver: bridge
+networks:
+  midas-network:
+    external: true
+    name: midas-network
+
+volumes:
+  logs:
+  plugins:
+  config:
+  include:
